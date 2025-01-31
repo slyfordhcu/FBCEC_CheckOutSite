@@ -12,7 +12,7 @@ app.disable('x-powered-by');
 
 // Allow CORS only from GitHub Pages domain
 app.use(cors({
-  origin: 'https://elio3050.github.io' 
+  origin: 'https://slyfordhcu.github.io' 
 }));
 
 // Set X-Content-Type-Options header to nosniff
