@@ -1,100 +1,168 @@
-const express = require('express');
-const cors = require('cors');
-const fetch = require('node-fetch');
-
-const app = express();
-
-// Enable CORS for all origins (you can restrict this to your frontend domain later)
-app.use(cors());
-
-// CONFIGURATION - Replace these with your actual values
-const APP_ID = 'your_app_id_here';
-const SECRET = 'your_secret_here';
-const EVENT_ID = 'your_event_id_here';
-
-// Health check endpoint
-app.get('/', (req, res) => {
-  res.json({ 
-    status: 'Server is running',
-    message: 'Use /api/checkouts to get checkout data'
-  });
-});
-
-// Main endpoint to get checkouts
-app.get('/api/checkouts', async (req, res) => {
-  try {
-    // Create Basic Auth header
-    const auth = Buffer.from(`${APP_ID}:${SECRET}`).toString('base64');
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Check-outs</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background-color: #f5f5f5;
+    }
+    h1 {
+      color: #333;
+    }
+    .message {
+      font-size: 20px;
+      margin-bottom: 10px;
+      padding: 15px;
+      background-color: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .name {
+      color: #2563eb;
+      font-weight: bold;
+    }
+    .status {
+      margin-top: 10px;
+      padding: 10px;
+      background-color: #e5e7eb;
+      border-radius: 5px;
+      font-size: 14px;
+    }
+    .error {
+      color: #dc2626;
+    }
+    .loading {
+      color: #6b7280;
+    }
+    .time {
+      font-size: 14px;
+      color: #6b7280;
+      margin-left: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Pick-up List</h1>
+  <div class="status" id="status">Connecting...</div>
+  <div id="data"></div>
+  
+  <script>
+    const BACKEND_URL = 'https://fbcec-checkoutsite.onrender.com';
+    const POLL_INTERVAL = 5000; // Poll every 5 seconds
     
-    // Build the API URL with filters
-    const apiUrl = new URL('https://api.planningcenteronline.com/check-ins/v2/check_ins');
-    apiUrl.searchParams.append('where[event_id]', EVENT_ID);
-    apiUrl.searchParams.append('filter', 'checked_out');
-    apiUrl.searchParams.append('order', '-checked_out_at');
-    apiUrl.searchParams.append('per_page', '100');
-    
-    console.log(`Fetching from: ${apiUrl.toString()}`);
-    
-    // Make request to Planning Center API
-    const response = await fetch(apiUrl.toString(), {
-      headers: {
-        'Authorization': `Basic ${auth}`,
-        'Accept': 'application/json'
-      }
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Planning Center API error: ${response.status} ${response.statusText}`);
+    // Helper function to check if a date is today
+    function isToday(dateString) {
+      const today = new Date();
+      const date = new Date(dateString);
+      return (
+        date.getDate() === today.getDate() &&
+        date.getMonth() === today.getMonth() &&
+        date.getFullYear() === today.getFullYear()
+      );
     }
     
-    const data = await response.json();
+    // Helper function to format time
+    function formatTime(dateString) {
+      const date = new Date(dateString);
+      return date.toLocaleTimeString('en-US', { 
+        hour: 'numeric', 
+        minute: '2-digit',
+        hour12: true 
+      });
+    }
     
-    console.log(`Successfully fetched ${data.data ? data.data.length : 0} checkouts`);
+    // Helper function to compare and sort by recency
+    function sortByCreation(a, b) {
+      const dateA = new Date(a.attributes.checked_out_at);
+      const dateB = new Date(b.attributes.checked_out_at);
+      return dateB - dateA; // Sort in descending order (most recent first)
+    }
     
-    // Return the data to the frontend
-    res.json(data);
-    
-  } catch (error) {
-    console.error('Error fetching checkouts:', error);
-    res.status(500).json({ 
-      error: error.message,
-      details: 'Failed to fetch checkout data from Planning Center'
-    });
-  }
-});
-
-// Optional: Endpoint to get all events (useful for debugging)
-app.get('/api/events', async (req, res) => {
-  try {
-    const auth = Buffer.from(`${APP_ID}:${SECRET}`).toString('base64');
-    
-    const response = await fetch(
-      'https://api.planningcenteronline.com/check-ins/v2/events',
-      {
-        headers: {
-          'Authorization': `Basic ${auth}`,
-          'Accept': 'application/json'
+    // Function to fetch data from backend
+    async function fetchCheckouts() {
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/checkouts`);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
+        
+        const data = await response.json();
+        updateDisplay(data);
+        updateStatus('Connected', false);
+        
+      } catch (error) {
+        console.error('Error fetching data:', error);
+        updateStatus(`Error: ${error.message}`, true);
       }
-    );
-    
-    if (!response.ok) {
-      throw new Error(`Planning Center API error: ${response.status}`);
     }
     
-    const data = await response.json();
-    res.json(data);
+    // Function to update the display
+    function updateDisplay(data) {
+      const dataContainer = document.getElementById('data');
+      dataContainer.innerHTML = ''; // Clear existing data
+      
+      // Check if data exists and has the expected structure
+      if (!data || !data.data || !Array.isArray(data.data)) {
+        dataContainer.innerHTML = '<div class="message">No checkout data available</div>';
+        return;
+      }
+      
+      // Filter names created today and sort them by creation time
+      const filteredData = data.data
+        .filter(person => isToday(person.attributes.checked_out_at))
+        .sort(sortByCreation);
+      
+      if (filteredData.length === 0) {
+        dataContainer.innerHTML = '<div class="message">No checkouts today yet</div>';
+        return;
+      }
+      
+      // Display sorted names
+      filteredData.forEach(person => {
+        const firstname = person.attributes.first_name;
+        const lastname = person.attributes.last_name;
+        const checkoutTime = person.attributes.checked_out_at;
+        
+        // Create the pickup message
+        const message = `<span class="name">${firstname} ${lastname}</span> is ready to be picked up!<span class="time">${formatTime(checkoutTime)}</span>`;
+        
+        // Create a div element to hold the message
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message';
+        messageDiv.innerHTML = message;
+        
+        // Append the div to the data container
+        dataContainer.appendChild(messageDiv);
+      });
+    }
     
-  } catch (error) {
-    console.error('Error fetching events:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Start the server
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`✅ Server running on port ${PORT}`);
-  console.log(`📍 Checkout endpoint: http://localhost:${PORT}/api/checkouts`);
-  console.log(`📍 Events endpoint: http://localhost:${PORT}/api/events`);
-});
+    // Function to update status message
+    function updateStatus(message, isError) {
+      const statusEl = document.getElementById('status');
+      statusEl.textContent = message;
+      statusEl.className = isError ? 'status error' : 'status';
+    }
+    
+    // Start polling
+    fetchCheckouts(); // Initial fetch
+    setInterval(fetchCheckouts, POLL_INTERVAL);
+    
+    // Update last refreshed time
+    setInterval(() => {
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString('en-US', { 
+        hour: 'numeric', 
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true 
+      });
+      updateStatus(`Last updated: ${timeStr}`, false);
+    }, 1000);
+  </script>
+</body>
+</html>
