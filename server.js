@@ -8,9 +8,9 @@ const app = express();
 app.use(cors());
 
 // CONFIGURATION - Replace these with your actual values
-const APP_ID = 'your_app_id_here';
-const SECRET = 'your_secret_here';
-const EVENT_ID = 'your_event_id_here';
+const APP_ID = '89fe081e66765a90dc96f0ee9a044dbad03598cb66f309676019c781471ad290';
+const SECRET = 'pco_pat_d11414e5ee1d9df586b37f9d91045169a6c13718ab57eae2e3db61247e03e9f586bf8cdb';
+const EVENT_ID = '683687';
 
 // Health check endpoint
 app.get('/', (req, res) => {
