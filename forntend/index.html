@@ -9,9 +9,14 @@
       font-family: Arial, sans-serif;
       padding: 20px;
       background-color: #f5f5f5;
+      margin: 0;
     }
     h1 {
       color: #333;
+      margin-bottom: 20px;
+    }
+    #data {
+      margin-top: 20px;
     }
     .message {
       font-size: 20px;
@@ -33,7 +38,9 @@
       font-size: 14px;
     }
     .error {
+      background-color: #fee2e2;
       color: #dc2626;
+      border: 1px solid #fecaca;
     }
     .loading {
       color: #6b7280;
@@ -43,14 +50,24 @@
       color: #6b7280;
       margin-left: 10px;
     }
+    .no-data {
+      padding: 20px;
+      background-color: #fff;
+      border-radius: 8px;
+      text-align: center;
+      color: #6b7280;
+    }
   </style>
 </head>
 <body>
   <h1>Pick-up List</h1>
-  <div class="status" id="status">Connecting...</div>
-  <div id="data"></div>
+  <div class="status" id="status">Loading checkout data...</div>
+  <div id="data">
+    <div class="no-data">Connecting to server...</div>
+  </div>
   
   <script>
+    // IMPORTANT: Replace this with your actual Render backend URL
     const BACKEND_URL = 'https://fbcec-checkoutsite-b9ax.onrender.com';
     const POLL_INTERVAL = 5000; // Poll every 5 seconds
     
@@ -85,6 +102,8 @@
     // Function to fetch data from backend
     async function fetchCheckouts() {
       try {
+        console.log('Fetching from:', `${BACKEND_URL}/api/checkouts`);
+        
         const response = await fetch(`${BACKEND_URL}/api/checkouts`);
         
         if (!response.ok) {
@@ -92,12 +111,18 @@
         }
         
         const data = await response.json();
+        console.log('Received data:', data);
+        
         updateDisplay(data);
-        updateStatus('Connected', false);
+        updateStatus(`Last updated: ${new Date().toLocaleTimeString()}`, false);
         
       } catch (error) {
         console.error('Error fetching data:', error);
         updateStatus(`Error: ${error.message}`, true);
+        
+        // Show error in data area too
+        const dataContainer = document.getElementById('data');
+        dataContainer.innerHTML = `<div class="message error">Unable to connect to server. Please check that your backend is running.</div>`;
       }
     }
     
@@ -108,24 +133,24 @@
       
       // Check if data exists and has the expected structure
       if (!data || !data.data || !Array.isArray(data.data)) {
-        dataContainer.innerHTML = '<div class="message">No checkout data available</div>';
+        dataContainer.innerHTML = '<div class="no-data">No checkout data available</div>';
         return;
       }
       
       // Filter names created today and sort them by creation time
       const filteredData = data.data
-        .filter(person => isToday(person.attributes.checked_out_at))
+        .filter(person => person.attributes && person.attributes.checked_out_at && isToday(person.attributes.checked_out_at))
         .sort(sortByCreation);
       
       if (filteredData.length === 0) {
-        dataContainer.innerHTML = '<div class="message">No checkouts today yet</div>';
+        dataContainer.innerHTML = '<div class="no-data">No checkouts today yet</div>';
         return;
       }
       
       // Display sorted names
       filteredData.forEach(person => {
-        const firstname = person.attributes.first_name;
-        const lastname = person.attributes.last_name;
+        const firstname = person.attributes.first_name || 'Unknown';
+        const lastname = person.attributes.last_name || '';
         const checkoutTime = person.attributes.checked_out_at;
         
         // Create the pickup message
@@ -149,20 +174,11 @@
     }
     
     // Start polling
+    console.log('Starting checkout display...');
+    console.log('Backend URL:', BACKEND_URL);
+    
     fetchCheckouts(); // Initial fetch
     setInterval(fetchCheckouts, POLL_INTERVAL);
-    
-    // Update last refreshed time
-    setInterval(() => {
-      const now = new Date();
-      const timeStr = now.toLocaleTimeString('en-US', { 
-        hour: 'numeric', 
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: true 
-      });
-      updateStatus(`Last updated: ${timeStr}`, false);
-    }, 1000);
   </script>
 </body>
 </html>
